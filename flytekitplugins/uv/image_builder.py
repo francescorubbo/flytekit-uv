@@ -16,7 +16,7 @@ class UvImageBuilder(ImageSpecBuilder):
 
     @property
     def name(self) -> str:
-        return "uv_builder"
+        return "uv"
 
     def build_image(self, image_spec: ImageSpec) -> str:
         logger.info(f"Building image with {self.name} for ImageSpec: {image_spec.name}")
@@ -105,4 +105,4 @@ class UvImageBuilder(ImageSpecBuilder):
             return target_image
 
 
-ImageBuildEngine.register("uv_builder", UvImageBuilder())
+ImageBuildEngine.register("uv", UvImageBuilder())
