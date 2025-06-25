@@ -1,0 +1,12 @@
+[project]
+name = "flytekit-uv"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.9"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "flytekit>=1.16.1",
+    "setuptools>=80.9.0",
+]
