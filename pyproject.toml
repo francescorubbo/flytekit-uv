@@ -2,11 +2,37 @@
 name = "flytekit-uv"
 version = "0.1.0"
 description = "A flytekit plugin for ImageSpec with a UV backend."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+authors = [
+    { name = "Francesco Rubbo", email = "francescorubbo@users.noreply.github.com" }
+]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "flytekit>=1.16,<2",
+]
+
+[urls]gi
+Repository = "https://github.com/francescorubbo/flytekit-uv"
+
+[entry_points."flytekit.plugins"]
+uv = "flytekitplugins.uv"
 
 [dependency-groups]
-dev = [
-    "flytekit>=1.16,<2",
-    "setuptools>=80.9.0",
-]
+dev = []
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
