@@ -24,7 +24,7 @@ dependencies = [
     "flytekit>=1.16,<2",
 ]
 
-[urls]gi
+[urls]
 Repository = "https://github.com/francescorubbo/flytekit-uv"
 
 [entry_points."flytekit.plugins"]
