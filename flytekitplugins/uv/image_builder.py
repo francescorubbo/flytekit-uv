@@ -60,7 +60,7 @@ class UvImageBuilder(ImageSpecBuilder):
             if image_spec.pip_secret_mounts:
                 for secret_id, secret_env in image_spec.pip_secret_mounts:
                     pip_secret_mount += (
-                        f"--mount=type=secret, id={secret_id}, env={secret_env} "
+                        f"--mount=type=secret,id={secret_id},env={secret_env} "
                     )
 
             # Install application dependencies using uv
