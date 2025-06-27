@@ -41,6 +41,10 @@ class UvImageBuilder(ImageSpecBuilder):
 
             # Define the base image
             base_image = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+            if image_spec.base_image:
+                raise NotImplementedError(
+                    f"Only supporting default uv image {image_spec.base_image} for now"
+                )
 
             # Construct the Dockerfile content
             dockerfile_content = [
@@ -65,19 +69,25 @@ class UvImageBuilder(ImageSpecBuilder):
 
             # Install application dependencies using uv
             if image_spec.requirements:
-                dockerfile_content.append(
-                    f"""
-                    RUN {pip_secret_mount} \
-                        uv pip install --system --no-deps -r {image_spec.requirements}
-                    """
+                uv_install_cmd = (
+                    f"RUN {pip_secret_mount} uv pip install "
+                    f"--system --no-deps -r {image_spec.requirements}"
                 )
+                dockerfile_content.append(uv_install_cmd)
+                if image_spec.pip_index or image_spec.pip_extra_index_url:
+                    raise ValueError("Specify pip index in requirements file")
             elif image_spec.packages:
-                dockerfile_content.append(
-                    f"""
-                    RUN {pip_secret_mount} \
-                        uv pip install --system {" ".join(image_spec.packages)}
-                    """
+                uv_install_cmd = (
+                    f"RUN {pip_secret_mount} uv pip install "
+                    f"--system {' '.join(image_spec.packages)} "
                 )
+                if image_spec.pip_index:
+                    uv_install_cmd += f"--default-index {image_spec.pip_index} "
+                if image_spec.pip_extra_index_url:
+                    uv_install_cmd += (
+                        f"--extra-index-url {image_spec.pip_extra_index_url} "  # noqa: E501
+                    )
+                dockerfile_content.append(uv_install_cmd)
 
             # Add any apt packages
             if image_spec.apt_packages:
