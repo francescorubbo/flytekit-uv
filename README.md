@@ -22,3 +22,15 @@ def task1():
     import pandas
     ...
 ```
+
+# Development
+
+Install [uv](https://docs.astral.sh/uv/)
+```shell
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Install pre-commit hooks:
+```shell
+uv run pre-commit install
+```
