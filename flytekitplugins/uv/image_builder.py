@@ -43,17 +43,27 @@ class UvImageBuilder(ImageSpecBuilder):
             base_image = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
             if image_spec.base_image:
                 raise NotImplementedError(
-                    f"Only supporting default uv image {image_spec.base_image} for now"
+                    f"Only support default uv image {image_spec.base_image} for now"
                 )
 
             # Construct the Dockerfile content
             dockerfile_content = [
                 f"FROM {base_image}",
-                # Install Flytekit
-                f"ARG FLYTEKIT_VERSION={flytekit.__version__ or '1.16.1'}",
-                "RUN uv pip install --system --no-cache-dir flytekit==${FLYTEKIT_VERSION}",  # noqa: E501
                 "WORKDIR /app",
+                "ENV UV_COMPILE_BYTECODE=1",
+                "ENV UV_LINK_MODE=copy",
+                "ENV UV_SYSTEM_PYTHON = 1",
+                "RUN uv init --bare",
+                f"RUN uv add flytekit==${flytekit.__version__ or '1.16.1'}",
             ]
+
+            # Add any apt packages
+            if image_spec.apt_packages:
+                dockerfile_content.append(
+                    "RUN apt-get update && apt-get install -y "
+                    + " ".join(image_spec.apt_packages)
+                    + " && rm -rf /var/lib/apt/lists/*"
+                )
 
             # Set user defined env vars
             if image_spec.env:
@@ -69,33 +79,28 @@ class UvImageBuilder(ImageSpecBuilder):
 
             # Install application dependencies using uv
             if image_spec.requirements:
-                uv_install_cmd = (
-                    f"RUN {pip_secret_mount} uv pip install "
-                    f"--system --no-deps -r {image_spec.requirements}"
-                )
-                dockerfile_content.append(uv_install_cmd)
-                if image_spec.pip_index or image_spec.pip_extra_index_url:
-                    raise ValueError("Specify pip index in requirements file")
+                raise NotImplementedError("image_spec.requirements not supported yet")
             elif image_spec.packages:
-                uv_install_cmd = (
-                    f"RUN {pip_secret_mount} uv pip install "
-                    f"--system {' '.join(image_spec.packages)} "
+                uv_add_cmd = (
+                    f"RUN {pip_secret_mount} uv add {' '.join(image_spec.packages)} "
                 )
                 if image_spec.pip_index:
-                    uv_install_cmd += f"--default-index {image_spec.pip_index} "
+                    uv_add_cmd += f"--default-index {image_spec.pip_index} "
                 if image_spec.pip_extra_index_url:
-                    uv_install_cmd += (
-                        f"--extra-index-url {image_spec.pip_extra_index_url} "  # noqa: E501
-                    )
-                dockerfile_content.append(uv_install_cmd)
+                    uv_add_cmd += f"--extra-index-url {image_spec.pip_extra_index_url} "
+                dockerfile_content.append(uv_add_cmd)
 
-            # Add any apt packages
-            if image_spec.apt_packages:
-                dockerfile_content.append(
-                    "RUN apt-get update && apt-get install -y "
-                    + " ".join(image_spec.apt_packages)
-                    + " && rm -rf /var/lib/apt/lists/*"
-                )
+            uv_cache_mount = "--mount=type=cache,target=/root/.cache/uv"
+            uv_sync_cmd = (
+                f"RUN {pip_secret_mount} {uv_cache_mount} uv sync --no-install-project"
+            )
+            dockerfile_content.extend(
+                [
+                    uv_sync_cmd,
+                    "COPY . /app",
+                    "ENTRYPOINT []",
+                ]
+            )
 
             # Add any custom commands
             if image_spec.commands:
@@ -131,11 +136,10 @@ class UvImageBuilder(ImageSpecBuilder):
 
             try:
                 # Execute the Docker build
-                result = subprocess.run(
-                    build_command, check=True, capture_output=True, text=True
+                subprocess.run(
+                    build_command,
+                    check=True,
                 )
-                logger.info(f"Docker build stdout:\n{result.stdout}")
-                logger.info(f"Docker build stderr:\n{result.stderr}")
                 logger.info(f"Successfully built image: {target_image}")
             except subprocess.CalledProcessError as e:
                 logger.error(
