@@ -7,6 +7,8 @@ import flytekit
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 
+DEFAULT_FLYTEKIT_VERSION = "1.16.1"
+
 
 class UvImageBuilder(ImageSpecBuilder):
     """
@@ -50,11 +52,6 @@ class UvImageBuilder(ImageSpecBuilder):
             dockerfile_content = [
                 f"FROM {base_image}",
                 "WORKDIR /app",
-                "ENV UV_COMPILE_BYTECODE=1",
-                "ENV UV_LINK_MODE=copy",
-                "ENV UV_SYSTEM_PYTHON = 1",
-                "RUN uv init --bare",
-                f"RUN uv add flytekit=={flytekit.__version__ or '1.16.1'}",
             ]
 
             # Add any apt packages
@@ -70,6 +67,19 @@ class UvImageBuilder(ImageSpecBuilder):
                 envs = " ".join(f"{k}={v}" for k, v in image_spec.env.items())
                 dockerfile_content.append(f"ENV {envs}")
 
+            # Set up uv
+            uv_cache_mount = "--mount=type=cache,target=/root/.cache/uv"
+            flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
+            dockerfile_content.extend(
+                [
+                    "ENV UV_COMPILE_BYTECODE=1",
+                    "ENV UV_LINK_MODE=copy",
+                    "ENV UV_SYSTEM_PYTHON = 1",
+                    "RUN uv init --bare",
+                    f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
+                ]
+            )
+
             pip_secret_mount = ""
             if image_spec.pip_secret_mounts:
                 for secret_id, secret_env in image_spec.pip_secret_mounts:
@@ -82,7 +92,8 @@ class UvImageBuilder(ImageSpecBuilder):
                 raise NotImplementedError("image_spec.requirements not supported yet")
             elif image_spec.packages:
                 uv_add_cmd = (
-                    f"RUN {pip_secret_mount} uv add {' '.join(image_spec.packages)} "
+                    f"RUN {uv_cache_mount} {pip_secret_mount} "
+                    f"uv add {' '.join(image_spec.packages)} "
                 )
                 if image_spec.pip_index:
                     uv_add_cmd += f"--default-index {image_spec.pip_index} "
@@ -90,7 +101,6 @@ class UvImageBuilder(ImageSpecBuilder):
                     uv_add_cmd += f"--extra-index-url {image_spec.pip_extra_index_url} "
                 dockerfile_content.append(uv_add_cmd)
 
-            uv_cache_mount = "--mount=type=cache,target=/root/.cache/uv"
             uv_sync_cmd = (
                 f"RUN {pip_secret_mount} {uv_cache_mount} uv sync --no-install-project"
             )
