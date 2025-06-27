@@ -54,7 +54,7 @@ class UvImageBuilder(ImageSpecBuilder):
                 "ENV UV_LINK_MODE=copy",
                 "ENV UV_SYSTEM_PYTHON = 1",
                 "RUN uv init --bare",
-                f"RUN uv add flytekit==${flytekit.__version__ or '1.16.1'}",
+                f"RUN uv add flytekit=={flytekit.__version__ or '1.16.1'}",
             ]
 
             # Add any apt packages
