@@ -55,13 +55,26 @@ class UvImageBuilder(ImageSpecBuilder):
                 envs = " ".join(f"{k}={v}" for k, v in image_spec.env.items())
                 dockerfile_content.append(f"ENV {envs}")
 
+            pip_secret_mount = ""
+            if image_spec.pip_secret_mounts:
+                for secret_id, secret_env in image_spec.pip_secret_mounts:
+                    pip_secret_mount += f"--mount=type=secret, id={secret_id}, env={secret_env} "
+
             # Install application dependencies using uv
             if image_spec.requirements:
                 dockerfile_content.append(
-                    f"RUN uv pip install --system --no-deps -r {image_spec.requirements}")
+                    f"""
+                    RUN {pip_secret_mount} \
+                        uv pip install --system --no-deps -r {image_spec.requirements}
+                    """
+                )
             elif image_spec.packages:
                 dockerfile_content.append(
-                    f"RUN uv pip install --system {' '.join(image_spec.packages)}")
+                    f"""
+                    RUN {pip_secret_mount} \
+                        uv pip install --system {' '.join(image_spec.packages)}
+                    """
+                )
 
             # Add any apt packages
             if image_spec.apt_packages:
@@ -88,6 +101,10 @@ class UvImageBuilder(ImageSpecBuilder):
                 "--push",
                 str(build_context_path)
             ]
+
+            if image_spec.pip_secret_mounts:
+                for secret_id, secret_env in image_spec.pip_secret_mounts:
+                    build_command.extend(["--secret", f"id={secret_id},env={secret_env}"])
 
             logger.info(f"Executing build command: {' '.join(build_command)}")
 
