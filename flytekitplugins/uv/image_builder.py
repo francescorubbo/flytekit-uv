@@ -50,6 +50,11 @@ class UvImageBuilder(ImageSpecBuilder):
                 "WORKDIR /app",
             ]
 
+            # Set user defined env vars
+            if image_spec.env:
+                envs = " ".join(f"{k}={v}" for k, v in image_spec.env.items())
+                dockerfile_content.append(f"ENV {envs}")
+
             # Install application dependencies using uv
             if image_spec.requirements:
                 dockerfile_content.append(
