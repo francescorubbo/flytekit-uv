@@ -1,1 +1,1 @@
-from .image_builder import UvImageBuilder
+from .image_builder import UvImageBuilder as UvImageBuilder

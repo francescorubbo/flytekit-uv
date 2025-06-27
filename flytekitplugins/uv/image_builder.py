@@ -1,10 +1,10 @@
+import shutil
 import subprocess
 import tempfile
-import shutil
 from pathlib import Path
 
 import flytekit
-from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpecBuilder, ImageSpec
+from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 
 
@@ -31,10 +31,13 @@ class UvImageBuilder(ImageSpecBuilder):
             # Copy source code if source_root is provided (important for uv.lock)
             if image_spec.source_root:
                 # Copy the entire source_root to the build context
-                shutil.copytree(image_spec.source_root, build_context_path,
-                                dirs_exist_ok=True)
+                shutil.copytree(
+                    image_spec.source_root, build_context_path, dirs_exist_ok=True
+                )
                 logger.info(
-                    f"Copied source_root from {image_spec.source_root} to {build_context_path}")
+                    f"Copied source_root from {image_spec.source_root}"
+                    f" to {build_context_path}"
+                )
 
             # Define the base image
             base_image = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
@@ -42,11 +45,9 @@ class UvImageBuilder(ImageSpecBuilder):
             # Construct the Dockerfile content
             dockerfile_content = [
                 f"FROM {base_image}",
-
                 # Install Flytekit
                 f"ARG FLYTEKIT_VERSION={flytekit.__version__ or '1.16.1'}",
-                f"RUN uv pip install --system --no-cache-dir flytekit==${{FLYTEKIT_VERSION}}",
-
+                "RUN uv pip install --system --no-cache-dir flytekit==${FLYTEKIT_VERSION}",  # noqa: E501
                 "WORKDIR /app",
             ]
 
@@ -58,7 +59,9 @@ class UvImageBuilder(ImageSpecBuilder):
             pip_secret_mount = ""
             if image_spec.pip_secret_mounts:
                 for secret_id, secret_env in image_spec.pip_secret_mounts:
-                    pip_secret_mount += f"--mount=type=secret, id={secret_id}, env={secret_env} "
+                    pip_secret_mount += (
+                        f"--mount=type=secret, id={secret_id}, env={secret_env} "
+                    )
 
             # Install application dependencies using uv
             if image_spec.requirements:
@@ -72,15 +75,17 @@ class UvImageBuilder(ImageSpecBuilder):
                 dockerfile_content.append(
                     f"""
                     RUN {pip_secret_mount} \
-                        uv pip install --system {' '.join(image_spec.packages)}
+                        uv pip install --system {" ".join(image_spec.packages)}
                     """
                 )
 
             # Add any apt packages
             if image_spec.apt_packages:
                 dockerfile_content.append(
-                    "RUN apt-get update && apt-get install -y " + " ".join(
-                        image_spec.apt_packages) + " && rm -rf /var/lib/apt/lists/*")
+                    "RUN apt-get update && apt-get install -y "
+                    + " ".join(image_spec.apt_packages)
+                    + " && rm -rf /var/lib/apt/lists/*"
+                )
 
             # Add any custom commands
             if image_spec.commands:
@@ -94,34 +99,43 @@ class UvImageBuilder(ImageSpecBuilder):
 
             # --- Step 2: Execute the Docker build command ---
             build_command = [
-                "docker", "build",
-                "--tag", target_image,
-                "--file", str(dockerfile_path),
-                "--platform", image_spec.platform,
+                "docker",
+                "build",
+                "--tag",
+                target_image,
+                "--file",
+                str(dockerfile_path),
+                "--platform",
+                image_spec.platform,
                 "--push",
-                str(build_context_path)
+                str(build_context_path),
             ]
 
             if image_spec.pip_secret_mounts:
                 for secret_id, secret_env in image_spec.pip_secret_mounts:
-                    build_command.extend(["--secret", f"id={secret_id},env={secret_env}"])
+                    build_command.extend(
+                        ["--secret", f"id={secret_id},env={secret_env}"]
+                    )
 
             logger.info(f"Executing build command: {' '.join(build_command)}")
 
             try:
                 # Execute the Docker build
-                result = subprocess.run(build_command, check=True, capture_output=True,
-                                        text=True)
+                result = subprocess.run(
+                    build_command, check=True, capture_output=True, text=True
+                )
                 logger.info(f"Docker build stdout:\n{result.stdout}")
                 logger.info(f"Docker build stderr:\n{result.stderr}")
                 logger.info(f"Successfully built image: {target_image}")
             except subprocess.CalledProcessError as e:
                 logger.error(
-                    f"Image build failed. Stderr:\n{e.stderr}\nStdout:\n{e.stdout}")
+                    f"Image build failed. Stderr:\n{e.stderr}\nStdout:\n{e.stdout}"
+                )
                 raise Exception(f"Image build failed: {e.stderr}") from e
             except FileNotFoundError as e:
                 logger.error(
-                    "Docker command not found. Is Docker installed and in your PATH?")
+                    "Docker command not found. Is Docker installed and in your PATH?"
+                )
                 raise e
 
             return target_image
