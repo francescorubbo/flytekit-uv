@@ -31,6 +31,7 @@ jobs:
           retention-days: 1
   pypi-publish:
     name: Publish to PyPI
+    needs: [build-wheel]
     runs-on: ubuntu-latest
     environment:
       name: pypi
