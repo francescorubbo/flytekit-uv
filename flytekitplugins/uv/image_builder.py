@@ -7,6 +7,8 @@ import flytekit
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 
+DEFAULT_PYTHON_VERSION = "3.12"
+DEFAULT_UV_IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
 DEFAULT_FLYTEKIT_VERSION = "1.16.1"
 
 
@@ -42,7 +44,7 @@ class UvImageBuilder(ImageSpecBuilder):
                 )
 
             # Define the base image
-            base_image = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+            base_image = DEFAULT_UV_IMAGE
             if image_spec.base_image:
                 raise NotImplementedError(
                     f"Only support default uv image {image_spec.base_image} for now"
@@ -73,15 +75,16 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     "ENV UV_COMPILE_BYTECODE=1",
                     "ENV UV_LINK_MODE=copy",
-                    "RUN uv init --bare",
                 ]
             )
 
-            # Pin python version, if provided, otherwise use base_image's default
+            # Pin python version, if provided, otherwise use DEFAULT_PYTHON_VERSION
+            python_version = DEFAULT_PYTHON_VERSION
             if image_spec.python_version:
-                dockerfile_content.append(
-                    f"RUN uv python pin {image_spec.python_version}",
-                )
+                python_version = image_spec.python_version
+            dockerfile_content.append(
+                f"RUN uv init --bare --python {python_version}",
+            )
 
             # Add flytekit
             flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
