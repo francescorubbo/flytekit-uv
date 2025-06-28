@@ -1,4 +1,4 @@
-`flytekit-uv` is a `flytekit` plugin providing an alternative backend for ImageSpec based on [uv](https://docs.astral.sh/uv/), removing the dependency on `micromamba`.
+`flytekit-uv` is a [flytekit](https://github.com/flyteorg/flytekit) plugin providing an alternative backend for ImageSpec based on [uv](https://docs.astral.sh/uv/), removing the dependency on `micromamba`.
 
 # Installation
 
@@ -21,16 +21,4 @@ image_spec = ImageSpec(
 def task1():
     import pandas
     ...
-```
-
-# Development
-
-Install [uv](https://docs.astral.sh/uv/)
-```shell
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Install pre-commit hooks:
-```shell
-uv run pre-commit install
 ```
