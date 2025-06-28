@@ -74,7 +74,6 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     "ENV UV_COMPILE_BYTECODE=1",
                     "ENV UV_LINK_MODE=copy",
-                    "ENV UV_SYSTEM_PYTHON = 1",
                     "RUN uv init --bare",
                     f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
                 ]
@@ -101,14 +100,12 @@ class UvImageBuilder(ImageSpecBuilder):
                     uv_add_cmd += f"--extra-index-url {image_spec.pip_extra_index_url} "
                 dockerfile_content.append(uv_add_cmd)
 
-            uv_sync_cmd = (
-                f"RUN {pip_secret_mount} {uv_cache_mount} uv sync --no-install-project"
-            )
+            uv_sync_cmd = f"RUN {pip_secret_mount} {uv_cache_mount} uv sync"
             dockerfile_content.extend(
                 [
                     uv_sync_cmd,
                     "COPY . /app",
-                    "ENTRYPOINT []",
+                    "ENV PATH='/app/.venv/bin:$PATH'ENTRYPOINT []",
                 ]
             )
 
