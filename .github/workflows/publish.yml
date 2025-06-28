@@ -6,8 +6,8 @@ on:
       - released
 
 jobs:
-  build-wheel:
-    name: Build package wheel
+  build-dist:
+    name: Build package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,18 +20,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
-      - name: Set version and build wheel
+      - name: Set version and build distributions
         run: |
           uv version ${{ github.event.release.tag_name }}
-          uv build --wheel
-      - name: Upload wheel
+          uv build
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
+          name: build_artifacts
           path: ./dist
           retention-days: 1
   pypi-publish:
     name: Publish to PyPI
-    needs: [build-wheel]
+    needs: [build-dist]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -39,9 +40,11 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - name: Download dist wheel
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./dist
-      - name: Publish wheel to PyPI
+          name: build_artifacts
+          path: dist
+      - run: ls dist
+      - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
