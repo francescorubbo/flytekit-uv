@@ -74,6 +74,7 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     "ENV UV_COMPILE_BYTECODE=1",
                     "ENV UV_LINK_MODE=copy",
+                    "ENV UV_SYSTEM_PYTHON=1",
                     "RUN uv init --bare",
                     f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
                 ]
@@ -105,7 +106,6 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     uv_sync_cmd,
                     "COPY . /app",
-                    "ENV PATH='/app/.venv/bin:$PATH'",
                     "ENTRYPOINT []",
                 ]
             )
