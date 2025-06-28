@@ -69,14 +69,24 @@ class UvImageBuilder(ImageSpecBuilder):
 
             # Set up uv
             uv_cache_mount = "--mount=type=cache,target=/root/.cache/uv"
-            flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
             dockerfile_content.extend(
                 [
                     "ENV UV_COMPILE_BYTECODE=1",
                     "ENV UV_LINK_MODE=copy",
                     "RUN uv init --bare",
-                    f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
                 ]
+            )
+
+            # Pin python version, if provided, otherwise use base_image's default
+            if image_spec.python_version:
+                dockerfile_content.append(
+                    f"RUN uv python pin {image_spec.python_version}",
+                )
+
+            # Add flytekit
+            flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
+            dockerfile_content.append(
+                f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
             )
 
             pip_secret_mount = ""
