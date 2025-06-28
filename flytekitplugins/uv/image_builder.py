@@ -108,9 +108,10 @@ class UvImageBuilder(ImageSpecBuilder):
                     f"uv add {' '.join(image_spec.packages)} "
                 )
                 if image_spec.pip_index:
-                    uv_add_cmd += f"--default-index {image_spec.pip_index} "
+                    uv_add_cmd += f"--index {image_spec.pip_index} "
                 if image_spec.pip_extra_index_url:
-                    uv_add_cmd += f"--extra-index-url {image_spec.pip_extra_index_url} "
+                    for extra_index_url in image_spec.pip_extra_index_url:
+                        uv_add_cmd += f"--index {extra_index_url} "
                 dockerfile_content.append(uv_add_cmd)
 
             uv_sync_cmd = f"RUN {pip_secret_mount} {uv_cache_mount} uv sync"
