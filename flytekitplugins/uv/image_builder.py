@@ -105,7 +105,8 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     uv_sync_cmd,
                     "COPY . /app",
-                    "ENV PATH='/app/.venv/bin:$PATH'ENTRYPOINT []",
+                    "ENV PATH='/app/.venv/bin:$PATH'",
+                    "ENTRYPOINT []",
                 ]
             )
 
