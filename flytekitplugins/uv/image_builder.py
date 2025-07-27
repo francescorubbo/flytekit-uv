@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import tempfile
@@ -6,10 +7,23 @@ from pathlib import Path
 import flytekit
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
+from flytekit.tools.ignore import (
+    DockerIgnore,
+    GitIgnore,
+    Ignore,
+    IgnoreGroup,
+    StandardIgnore,
+)
+from flytekit.tools.script_mode import ls_files
 
 DEFAULT_PYTHON_VERSION = "3.12"
 DEFAULT_UV_IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
 DEFAULT_FLYTEKIT_VERSION = "1.16.1"
+
+
+class UVIgnore(Ignore):
+    def _is_ignored(self, path: str) -> bool:
+        return path.endswith("pyproject.toml") or path.endswith("uv.lock")
 
 
 class UvImageBuilder(ImageSpecBuilder):
@@ -35,9 +49,27 @@ class UvImageBuilder(ImageSpecBuilder):
             # Copy source code if source_root is provided (important for uv.lock)
             if image_spec.source_root:
                 # Copy the entire source_root to the build context
-                shutil.copytree(
-                    image_spec.source_root, build_context_path, dirs_exist_ok=True
+                ignore = IgnoreGroup(
+                    image_spec.source_root,
+                    [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
                 )
+                ls, _ = ls_files(
+                    str(image_spec.source_root),
+                    image_spec.source_copy_mode,
+                    deref_symlinks=False,
+                    ignore_group=ignore,
+                )
+                for file_to_copy in ls:
+                    rel_path = os.path.relpath(
+                        file_to_copy, start=str(image_spec.source_root)
+                    )
+                    Path(build_context_path / rel_path).parent.mkdir(
+                        parents=True, exist_ok=True
+                    )
+                    shutil.copy(
+                        file_to_copy,
+                        build_context_path / rel_path,
+                    )
                 logger.info(
                     f"Copied source_root from {image_spec.source_root}"
                     f" to {build_context_path}"
