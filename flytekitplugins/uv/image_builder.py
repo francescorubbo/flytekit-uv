@@ -45,36 +45,6 @@ class UvImageBuilder(ImageSpecBuilder):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_context_path = Path(temp_dir)
 
-            # --- Step 1: Prepare the build context ---
-            # Copy source code if source_root is provided (important for uv.lock)
-            if image_spec.source_root:
-                # Copy the entire source_root to the build context
-                ignore = IgnoreGroup(
-                    image_spec.source_root,
-                    [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
-                )
-                ls, _ = ls_files(
-                    str(image_spec.source_root),
-                    image_spec.source_copy_mode,
-                    deref_symlinks=False,
-                    ignore_group=ignore,
-                )
-                for file_to_copy in ls:
-                    rel_path = os.path.relpath(
-                        file_to_copy, start=str(image_spec.source_root)
-                    )
-                    Path(build_context_path / rel_path).parent.mkdir(
-                        parents=True, exist_ok=True
-                    )
-                    shutil.copy(
-                        file_to_copy,
-                        build_context_path / rel_path,
-                    )
-                logger.info(
-                    f"Copied source_root from {image_spec.source_root}"
-                    f" to {build_context_path}"
-                )
-
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
             if image_spec.base_image:
