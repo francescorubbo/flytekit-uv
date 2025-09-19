@@ -51,7 +51,7 @@ class UvImageBuilder(ImageSpecBuilder):
                     raise ValueError(
                         f"Field source_root for {image_spec} must be set when copy is set")
 
-                source_path = temp_dir / "src"
+                source_path = build_context_path / "src"
                 source_path.mkdir(parents=True, exist_ok=True)
 
                 ignore = IgnoreGroup(image_spec.source_root,
@@ -85,7 +85,7 @@ class UvImageBuilder(ImageSpecBuilder):
                         raise ValueError(
                             "Absolute paths or paths with '..' are not allowed in COPY command.")
 
-                    dst_path = temp_dir / src_path
+                    dst_path = build_context_path / src_path
                     dst_path.parent.mkdir(parents=True, exist_ok=True)
 
                     if src_path.is_dir():
