@@ -1,21 +1,13 @@
-import os
 import subprocess
-import shutil
 import tempfile
 from pathlib import Path
 
 import flytekit
-from flytekit.constants import CopyFileDetection
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 from flytekit.tools.ignore import (
     Ignore,
-    IgnoreGroup,
-    GitIgnore,
-    DockerIgnore,
-    StandardIgnore,
 )
-from flytekit.tools.script_mode import ls_files
 
 DEFAULT_PYTHON_VERSION = "3.12"
 DEFAULT_UV_IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
@@ -46,61 +38,6 @@ class UvImageBuilder(ImageSpecBuilder):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_context_path = Path(temp_dir)
 
-            if image_spec.source_copy_mode is not None and image_spec.source_copy_mode != CopyFileDetection.NO_COPY:
-                if not image_spec.source_root:
-                    raise ValueError(
-                        f"Field source_root for {image_spec} must be set when copy is set")
-
-                source_path = build_context_path / "src"
-                source_path.mkdir(parents=True, exist_ok=True)
-
-                ignore = IgnoreGroup(image_spec.source_root,
-                                     [GitIgnore, DockerIgnore, StandardIgnore])
-
-                ls, _ = ls_files(
-                    str(image_spec.source_root), image_spec.source_copy_mode,
-                    deref_symlinks=False, ignore_group=ignore
-                )
-
-                for file_to_copy in ls:
-                    rel_path = os.path.relpath(file_to_copy,
-                                               start=str(image_spec.source_root))
-                    Path(source_path / rel_path).parent.mkdir(parents=True,
-                                                              exist_ok=True)
-                    shutil.copy(
-                        file_to_copy,
-                        source_path / rel_path,
-                    )
-
-                copy_command_runtime = "COPY --chown=flytekit ./src /root"
-            else:
-                copy_command_runtime = ""
-
-            if image_spec.copy:
-                copy_commands = []
-                for src in image_spec.copy:
-                    src_path = Path(src)
-
-                    if src_path.is_absolute() or ".." in src_path.parts:
-                        raise ValueError(
-                            "Absolute paths or paths with '..' are not allowed in COPY command.")
-
-                    dst_path = build_context_path / src_path
-                    dst_path.parent.mkdir(parents=True, exist_ok=True)
-
-                    if src_path.is_dir():
-                        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
-                        copy_commands.append(
-                            f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.as_posix()}/")
-                    else:
-                        shutil.copy(src_path, dst_path)
-                        copy_commands.append(
-                            f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.parent.as_posix()}/")
-
-                extra_copy_cmds = "\n".join(copy_commands)
-            else:
-                extra_copy_cmds = ""
-
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
             if image_spec.base_image:
@@ -112,8 +49,6 @@ class UvImageBuilder(ImageSpecBuilder):
             dockerfile_content = [
                 f"FROM {base_image}",
                 "WORKDIR /root",
-                copy_command_runtime,
-                extra_copy_cmds,
             ]
 
             # Add any apt packages
