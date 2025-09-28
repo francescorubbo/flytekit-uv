@@ -121,20 +121,6 @@ class UvImageBuilder(ImageSpecBuilder):
                 ]
             )
 
-            # Pin python version, if provided, otherwise use DEFAULT_PYTHON_VERSION
-            python_version = DEFAULT_PYTHON_VERSION
-            if image_spec.python_version:
-                python_version = image_spec.python_version
-            dockerfile_content.append(
-                f"RUN uv init --bare --python {python_version}",
-            )
-
-            # Add flytekit
-            flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
-            dockerfile_content.append(
-                f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
-            )
-
             pip_secret_mount = ""
             if image_spec.pip_secret_mounts:
                 for secret_id, secret_env in image_spec.pip_secret_mounts:
@@ -162,6 +148,21 @@ class UvImageBuilder(ImageSpecBuilder):
                         "image_spec.requirements other than uv.lock not supported yet"
                     )
             elif image_spec.packages:
+                # Pin python version, if provided, otherwise use DEFAULT_PYTHON_VERSION
+                python_version = DEFAULT_PYTHON_VERSION
+                if image_spec.python_version:
+                    python_version = image_spec.python_version
+
+                dockerfile_content.append(
+                    f"RUN uv init --bare --python {python_version}",
+                )
+
+                # Add flytekit
+                flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
+                dockerfile_content.append(
+                    f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
+                )
+
                 uv_add_cmd = (
                     f"RUN {uv_cache_mount} {pip_secret_mount} "
                     f"uv add {' '.join(image_spec.packages)} "
