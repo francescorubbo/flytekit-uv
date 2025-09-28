@@ -6,6 +6,7 @@ from pathlib import Path
 
 import flytekit
 from flytekit.constants import CopyFileDetection
+from flytekit.image_spec.default_builder import _copy_lock_files_into_context
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 from flytekit.tools.ignore import (
@@ -45,6 +46,7 @@ class UvImageBuilder(ImageSpecBuilder):
         source_root = image_spec.override_source_root or image_spec.source_root
 
         # Create a temporary directory for the build context
+        copy_commands = []
         with tempfile.TemporaryDirectory() as temp_dir:
             build_context_path = Path(temp_dir)
 
@@ -82,9 +84,7 @@ class UvImageBuilder(ImageSpecBuilder):
                         source_path / rel_path,
                     )
 
-                copy_command = "COPY --chown=flytekit ./src /root"
-            else:
-                copy_command = ""
+                copy_commands.append("COPY --chown=flytekit ./src /root")
 
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
@@ -144,7 +144,23 @@ class UvImageBuilder(ImageSpecBuilder):
 
             # Install application dependencies using uv
             if image_spec.requirements:
-                raise NotImplementedError("image_spec.requirements not supported yet")
+                requirement_basename = os.path.basename(image_spec.requirements)
+                if requirement_basename != "uv.lock":
+                    _copy_lock_files_into_context(
+                        image_spec,
+                        "uv.lock",
+                        build_context_path,
+                    )
+                    copy_commands.append(
+                        "COPY --chown=flytekit ./uv.lock /root/uv.lock"
+                    )
+                    copy_commands.append(
+                        "COPY --chown=flytekit ./pyproject.toml /root/pyproject.toml"
+                    )
+                else:
+                    raise NotImplementedError(
+                        "image_spec.requirements other than uv.lock not supported yet"
+                    )
             elif image_spec.packages:
                 uv_add_cmd = (
                     f"RUN {uv_cache_mount} {pip_secret_mount} "
@@ -157,11 +173,13 @@ class UvImageBuilder(ImageSpecBuilder):
                         uv_add_cmd += f"--index {extra_index_url} "
                 dockerfile_content.append(uv_add_cmd)
 
-            uv_sync_cmd = f"RUN {pip_secret_mount} {uv_cache_mount} uv sync"
+            uv_sync_cmd = (
+                f"RUN {pip_secret_mount} {uv_cache_mount} uv sync --locked --no-dev"
+            )
             dockerfile_content.extend(
                 [
                     f"{uv_sync_cmd} --no-install-project",
-                    copy_command,
+                    *copy_commands,
                     uv_sync_cmd,
                     "ENV PATH=/root/.venv/bin:$PATH",
                     "ENTRYPOINT []",
