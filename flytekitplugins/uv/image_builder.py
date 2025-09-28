@@ -61,21 +61,19 @@ class UvImageBuilder(ImageSpecBuilder):
                 source_path = build_context_path / "src"
                 source_path.mkdir(parents=True, exist_ok=True)
                 ignore = IgnoreGroup(
-                    image_spec.source_root,
+                    source_root,
                     [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
                 )
 
                 ls, _ = ls_files(
-                    str(image_spec.source_root),
+                    str(source_root),
                     image_spec.source_copy_mode,
                     deref_symlinks=False,
                     ignore_group=ignore,
                 )
 
                 for file_to_copy in ls:
-                    rel_path = os.path.relpath(
-                        file_to_copy, start=str(image_spec.source_root)
-                    )
+                    rel_path = os.path.relpath(file_to_copy, start=str(source_root))
                     Path(source_path / rel_path).parent.mkdir(
                         parents=True, exist_ok=True
                     )
