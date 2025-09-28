@@ -1,13 +1,21 @@
+import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 import flytekit
+from flytekit.constants import CopyFileDetection
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 from flytekit.tools.ignore import (
+    DockerIgnore,
+    GitIgnore,
     Ignore,
+    IgnoreGroup,
+    StandardIgnore,
 )
+from flytekit.tools.script_mode import ls_files
 
 DEFAULT_PYTHON_VERSION = "3.12"
 DEFAULT_UV_IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
@@ -34,9 +42,51 @@ class UvImageBuilder(ImageSpecBuilder):
 
         target_image = image_spec.image_name()
 
+        source_root = image_spec.override_source_root or image_spec.source_root
+
         # Create a temporary directory for the build context
         with tempfile.TemporaryDirectory() as temp_dir:
             build_context_path = Path(temp_dir)
+
+            if (
+                image_spec.source_copy_mode is not None
+                and image_spec.source_copy_mode != CopyFileDetection.NO_COPY
+            ):
+                if not source_root:
+                    raise ValueError(
+                        f"Field source_root for {image_spec} must be set"
+                        " when copy is set"
+                    )
+
+                source_path = build_context_path / "src"
+                source_path.mkdir(parents=True, exist_ok=True)
+                ignore = IgnoreGroup(
+                    image_spec.source_root,
+                    [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
+                )
+
+                ls, _ = ls_files(
+                    str(image_spec.source_root),
+                    image_spec.source_copy_mode,
+                    deref_symlinks=False,
+                    ignore_group=ignore,
+                )
+
+                for file_to_copy in ls:
+                    rel_path = os.path.relpath(
+                        file_to_copy, start=str(image_spec.source_root)
+                    )
+                    Path(source_path / rel_path).parent.mkdir(
+                        parents=True, exist_ok=True
+                    )
+                    shutil.copy(
+                        file_to_copy,
+                        source_path / rel_path,
+                    )
+
+                copy_command = "COPY --chown=flytekit ./src /root"
+            else:
+                copy_command = ""
 
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
@@ -113,7 +163,7 @@ class UvImageBuilder(ImageSpecBuilder):
             dockerfile_content.extend(
                 [
                     f"{uv_sync_cmd} --no-install-project",
-                    "COPY . /root",
+                    copy_command,
                     uv_sync_cmd,
                     "ENV PATH=/root/.venv/bin:$PATH",
                     "ENTRYPOINT []",
