@@ -131,6 +131,7 @@ class UvImageBuilder(ImageSpecBuilder):
                     )
 
             # Install application dependencies using uv
+            uv_config_mount = ""
             if image_spec.requirements:
                 requirement_basename = os.path.basename(image_spec.requirements)
                 if requirement_basename == "uv.lock":
@@ -138,6 +139,10 @@ class UvImageBuilder(ImageSpecBuilder):
                         image_spec,
                         "uv.lock",
                         build_context_path,
+                    )
+                    uv_config_mount = (
+                        "--mount=type=bind,source=uv.lock,target=uv.lock "
+                        "--mount=type=bind,source=pyproject.toml,target=pyproject.toml"
                     )
                     copy_commands.append(
                         "COPY --chown=flytekit ./uv.lock /root/uv.lock"
@@ -177,7 +182,8 @@ class UvImageBuilder(ImageSpecBuilder):
                 dockerfile_content.append(uv_add_cmd)
 
             uv_sync_cmd = (
-                f"RUN {pip_secret_mount} {uv_cache_mount} uv sync --locked --no-dev"
+                f"RUN {pip_secret_mount} {uv_cache_mount} {uv_config_mount} "
+                "uv sync --locked --no-dev"
             )
             dockerfile_content.extend(
                 [
