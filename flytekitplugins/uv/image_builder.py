@@ -43,7 +43,9 @@ class UvImageBuilder(ImageSpecBuilder):
 
         target_image = image_spec.image_name()
 
-        source_root = image_spec.override_source_root or image_spec.source_root
+        source_root = (
+            getattr(image_spec, "override_source_root", None) or image_spec.source_root
+        )
 
         # Create a temporary directory for the build context
         copy_commands = []
@@ -131,7 +133,7 @@ class UvImageBuilder(ImageSpecBuilder):
             # Install application dependencies using uv
             if image_spec.requirements:
                 requirement_basename = os.path.basename(image_spec.requirements)
-                if requirement_basename != "uv.lock":
+                if requirement_basename == "uv.lock":
                     _copy_lock_files_into_context(
                         image_spec,
                         "uv.lock",
