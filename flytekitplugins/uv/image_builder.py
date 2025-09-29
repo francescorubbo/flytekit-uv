@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 
 import flytekit
+from flytekit.constants import CopyFileDetection
+from flytekit.image_spec.default_builder import _copy_lock_files_into_context
 from flytekit.image_spec.image_spec import ImageBuildEngine, ImageSpec, ImageSpecBuilder
 from flytekit.loggers import logger
 from flytekit.tools.ignore import (
@@ -41,39 +43,50 @@ class UvImageBuilder(ImageSpecBuilder):
 
         target_image = image_spec.image_name()
 
+        source_root = (
+            getattr(image_spec, "override_source_root", None) or image_spec.source_root
+        )
+
         # Create a temporary directory for the build context
+        copy_commands = []
         with tempfile.TemporaryDirectory() as temp_dir:
             build_context_path = Path(temp_dir)
 
-            # --- Step 1: Prepare the build context ---
-            # Copy source code if source_root is provided (important for uv.lock)
-            if image_spec.source_root:
-                # Copy the entire source_root to the build context
+            if (
+                image_spec.source_copy_mode is not None
+                and image_spec.source_copy_mode != CopyFileDetection.NO_COPY
+            ):
+                if not source_root:
+                    raise ValueError(
+                        f"Field source_root for {image_spec} must be set"
+                        " when copy is set"
+                    )
+
+                source_path = build_context_path / "src"
+                source_path.mkdir(parents=True, exist_ok=True)
                 ignore = IgnoreGroup(
-                    image_spec.source_root,
+                    source_root,
                     [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
                 )
+
                 ls, _ = ls_files(
-                    str(image_spec.source_root),
+                    str(source_root),
                     image_spec.source_copy_mode,
                     deref_symlinks=False,
                     ignore_group=ignore,
                 )
+
                 for file_to_copy in ls:
-                    rel_path = os.path.relpath(
-                        file_to_copy, start=str(image_spec.source_root)
-                    )
-                    Path(build_context_path / rel_path).parent.mkdir(
+                    rel_path = os.path.relpath(file_to_copy, start=str(source_root))
+                    Path(source_path / rel_path).parent.mkdir(
                         parents=True, exist_ok=True
                     )
                     shutil.copy(
                         file_to_copy,
-                        build_context_path / rel_path,
+                        source_path / rel_path,
                     )
-                logger.info(
-                    f"Copied source_root from {image_spec.source_root}"
-                    f" to {build_context_path}"
-                )
+
+                copy_commands.append("COPY --chown=flytekit ./src /root")
 
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
@@ -85,7 +98,7 @@ class UvImageBuilder(ImageSpecBuilder):
             # Construct the Dockerfile content
             dockerfile_content = [
                 f"FROM {base_image}",
-                "WORKDIR /app",
+                "WORKDIR /root",
             ]
 
             # Add any apt packages
@@ -110,20 +123,6 @@ class UvImageBuilder(ImageSpecBuilder):
                 ]
             )
 
-            # Pin python version, if provided, otherwise use DEFAULT_PYTHON_VERSION
-            python_version = DEFAULT_PYTHON_VERSION
-            if image_spec.python_version:
-                python_version = image_spec.python_version
-            dockerfile_content.append(
-                f"RUN uv init --bare --python {python_version}",
-            )
-
-            # Add flytekit
-            flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
-            dockerfile_content.append(
-                f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
-            )
-
             pip_secret_mount = ""
             if image_spec.pip_secret_mounts:
                 for secret_id, secret_env in image_spec.pip_secret_mounts:
@@ -132,9 +131,45 @@ class UvImageBuilder(ImageSpecBuilder):
                     )
 
             # Install application dependencies using uv
+            uv_config_mount = ""
             if image_spec.requirements:
-                raise NotImplementedError("image_spec.requirements not supported yet")
+                requirement_basename = os.path.basename(image_spec.requirements)
+                if requirement_basename == "uv.lock":
+                    _copy_lock_files_into_context(
+                        image_spec,
+                        "uv.lock",
+                        build_context_path,
+                    )
+                    uv_config_mount = (
+                        "--mount=type=bind,source=uv.lock,target=uv.lock "
+                        "--mount=type=bind,source=pyproject.toml,target=pyproject.toml"
+                    )
+                    copy_commands.append(
+                        "COPY --chown=flytekit ./uv.lock /root/uv.lock"
+                    )
+                    copy_commands.append(
+                        "COPY --chown=flytekit ./pyproject.toml /root/pyproject.toml"
+                    )
+                else:
+                    raise NotImplementedError(
+                        "image_spec.requirements other than uv.lock not supported yet"
+                    )
             elif image_spec.packages:
+                # Pin python version, if provided, otherwise use DEFAULT_PYTHON_VERSION
+                python_version = DEFAULT_PYTHON_VERSION
+                if image_spec.python_version:
+                    python_version = image_spec.python_version
+
+                dockerfile_content.append(
+                    f"RUN uv init --bare --python {python_version}",
+                )
+
+                # Add flytekit
+                flytekit_version = flytekit.__version__ or DEFAULT_FLYTEKIT_VERSION
+                dockerfile_content.append(
+                    f"RUN {uv_cache_mount} uv add flytekit=={flytekit_version}",
+                )
+
                 uv_add_cmd = (
                     f"RUN {uv_cache_mount} {pip_secret_mount} "
                     f"uv add {' '.join(image_spec.packages)} "
@@ -146,13 +181,16 @@ class UvImageBuilder(ImageSpecBuilder):
                         uv_add_cmd += f"--index {extra_index_url} "
                 dockerfile_content.append(uv_add_cmd)
 
-            uv_sync_cmd = f"RUN {pip_secret_mount} {uv_cache_mount} uv sync"
+            uv_sync_cmd = (
+                f"RUN {pip_secret_mount} {uv_cache_mount} {uv_config_mount} "
+                "uv sync --locked --no-dev"
+            )
             dockerfile_content.extend(
                 [
                     f"{uv_sync_cmd} --no-install-project",
-                    "COPY . /app",
+                    *copy_commands,
                     uv_sync_cmd,
-                    "ENV PATH=/app/.venv/bin:$PATH",
+                    "ENV PATH=/root/.venv/bin:$PATH",
                     "ENTRYPOINT []",
                 ]
             )
