@@ -92,7 +92,6 @@ class UvImageBuilder(ImageSpecBuilder):
                 copy_commands.append("COPY --chown=flytekit ./src /root")
 
             if image_spec.copy:
-                copy_commands = []
                 for src in image_spec.copy:
                     src_path = Path(src)
 
@@ -115,10 +114,6 @@ class UvImageBuilder(ImageSpecBuilder):
                         copy_commands.append(
                             f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.parent.as_posix()}/"  # noqa: E501
                         )
-
-                extra_copy_cmds = "\n".join(copy_commands)
-            else:
-                extra_copy_cmds = ""
 
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
@@ -221,7 +216,6 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     f"{uv_sync_cmd} --no-install-project",
                     *copy_commands,
-                    extra_copy_cmds,
                     uv_sync_cmd,
                     "ENV PATH=/root/.venv/bin:$PATH",
                     "ENTRYPOINT []",
