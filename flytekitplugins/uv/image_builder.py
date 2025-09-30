@@ -25,7 +25,9 @@ DEFAULT_FLYTEKIT_VERSION = "1.16.1"
 
 class UVIgnore(Ignore):
     def _is_ignored(self, path: str) -> bool:
-        return path.endswith("pyproject.toml") or path.endswith("uv.lock")
+        if Path(path).parent == Path("."):
+            return path.endswith("pyproject.toml") or path.endswith("uv.lock")
+        return False
 
 
 class UvImageBuilder(ImageSpecBuilder):
@@ -87,6 +89,35 @@ class UvImageBuilder(ImageSpecBuilder):
                     )
 
                 copy_commands.append("COPY --chown=flytekit ./src /root")
+
+            if image_spec.copy:
+                copy_commands = []
+                for src in image_spec.copy:
+                    src_path = Path(src)
+
+                    if src_path.is_absolute() or ".." in src_path.parts:
+                        raise ValueError(
+                            "Absolute paths or paths with '..' "
+                            "are not allowed in COPY command."
+                        )
+
+                    dst_path = build_context_path / src_path
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    if src_path.is_dir():
+                        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+                        copy_commands.append(
+                            f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.as_posix()}/"  # noqa: E501
+                        )
+                    else:
+                        shutil.copy(src_path, dst_path)
+                        copy_commands.append(
+                            f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.parent.as_posix()}/"  # noqa: E501
+                        )
+
+                extra_copy_cmds = "\n".join(copy_commands)
+            else:
+                extra_copy_cmds = ""
 
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
@@ -189,6 +220,7 @@ class UvImageBuilder(ImageSpecBuilder):
                 [
                     f"{uv_sync_cmd} --no-install-project",
                     *copy_commands,
+                    extra_copy_cmds,
                     uv_sync_cmd,
                     "ENV PATH=/root/.venv/bin:$PATH",
                     "ENTRYPOINT []",
