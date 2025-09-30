@@ -25,9 +25,7 @@ DEFAULT_FLYTEKIT_VERSION = "1.16.1"
 
 class UVIgnore(Ignore):
     def _is_ignored(self, path: str) -> bool:
-        if Path(path).parent == Path("."):
-            return path.endswith("pyproject.toml") or path.endswith("uv.lock")
-        return False
+        return path.endswith("pyproject.toml") or path.endswith("uv.lock")
 
 
 class UvImageBuilder(ImageSpecBuilder):
@@ -66,9 +64,12 @@ class UvImageBuilder(ImageSpecBuilder):
 
                 source_path = build_context_path / "src"
                 source_path.mkdir(parents=True, exist_ok=True)
+                ignores = [GitIgnore, DockerIgnore, StandardIgnore]
+                if image_spec.packages:
+                    ignores.append(UVIgnore)
                 ignore = IgnoreGroup(
                     source_root,
-                    [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
+                    ignores,
                 )
 
                 ls, _ = ls_files(
@@ -192,7 +193,7 @@ class UvImageBuilder(ImageSpecBuilder):
                     python_version = image_spec.python_version
 
                 dockerfile_content.append(
-                    f"RUN uv init --bare --python {python_version}",
+                    f"RUN uv init --bare --no-workspace --no-config --python {python_version}",  # noqa: E501
                 )
 
                 # Add flytekit
