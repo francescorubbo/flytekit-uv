@@ -64,9 +64,12 @@ class UvImageBuilder(ImageSpecBuilder):
 
                 source_path = build_context_path / "src"
                 source_path.mkdir(parents=True, exist_ok=True)
+                ignores = [GitIgnore, DockerIgnore, StandardIgnore]
+                if image_spec.packages:
+                    ignores.append(UVIgnore)
                 ignore = IgnoreGroup(
                     source_root,
-                    [GitIgnore, DockerIgnore, StandardIgnore, UVIgnore],
+                    ignores,
                 )
 
                 ls, _ = ls_files(
@@ -87,6 +90,30 @@ class UvImageBuilder(ImageSpecBuilder):
                     )
 
                 copy_commands.append("COPY --chown=flytekit ./src /root")
+
+            if image_spec.copy:
+                for src in image_spec.copy:
+                    src_path = Path(src)
+
+                    if src_path.is_absolute() or ".." in src_path.parts:
+                        raise ValueError(
+                            "Absolute paths or paths with '..' "
+                            "are not allowed in COPY command."
+                        )
+
+                    dst_path = build_context_path / src_path
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    if src_path.is_dir():
+                        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+                        copy_commands.append(
+                            f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.as_posix()}/"  # noqa: E501
+                        )
+                    else:
+                        shutil.copy(src_path, dst_path)
+                        copy_commands.append(
+                            f"COPY --chown=flytekit {src_path.as_posix()} /root/{src_path.parent.as_posix()}/"  # noqa: E501
+                        )
 
             # Define the base image
             base_image = DEFAULT_UV_IMAGE
@@ -161,7 +188,7 @@ class UvImageBuilder(ImageSpecBuilder):
                     python_version = image_spec.python_version
 
                 dockerfile_content.append(
-                    f"RUN uv init --bare --python {python_version}",
+                    f"RUN uv init --bare --no-workspace --no-config --python {python_version}",  # noqa: E501
                 )
 
                 # Add flytekit
